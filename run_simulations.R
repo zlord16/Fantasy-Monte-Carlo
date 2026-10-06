@@ -3,16 +3,25 @@ library(purrr)
 library(readr)
 library(nflreadr)
 
-# ==========================================
-# 1. LOAD AND AGGREGATE LIVE PLAYER STATS
-# ==========================================
-# Fetch current season stats
 stats <- load_player_stats(seasons = most_recent_season())
 
-# Aggregate stats to create per-game averages for WRs, TEs, RBs, and QBs
+# 2. Identify players who are on IR or ruled Out this week
+active_rosters <- load_rosters(seasons = most_recent_season()) %>%
+  filter(status == "ACT") %>%
+  select(player_id = gsis_id)
+
+weekly_injuries <- load_injuries(seasons = most_recent_season()) %>%
+  filter(week == max(week), report_status %in% c("Out", "Doubtful")) %>%
+  select(player_id = gsis_id)
+
+# 3. Build the clean, healthy player pool
 player_pool <- stats %>%
+  # Cross-reference with live active rosters (Instantly drops players on IR)
+  inner_join(active_rosters, by = "player_id") %>%
+  # Cross-reference with the weekly injury report (Drops players ruled Out)
+  anti_join(weekly_injuries, by = "player_id") %>%
   filter(position %in% c("WR", "TE", "RB", "QB")) %>% 
-  group_by(player = player_display_name, position) %>%
+  group_by(player = player_display_name, position, team = recent_team) %>%
   summarize(
     games = n(),
     
