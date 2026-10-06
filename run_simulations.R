@@ -3,9 +3,8 @@ library(purrr)
 library(readr)
 library(nflreadr)
 
-# 1. Load stats & INSTANTLY drop backup/garbage-time games
-stats <- load_player_stats(seasons = most_recent_season()) %>%
-  filter(attempts >= 10 | carries >= 4 | targets >= 3)
+# 1. Load stats (Removed the early filter so partial injury games don't skew the math)
+stats <- load_player_stats(seasons = most_recent_season())
 
 # 2. Live rosters and injury report
 active_rosters <- load_rosters(seasons = most_recent_season()) %>%
@@ -16,24 +15,24 @@ weekly_injuries <- load_injuries(seasons = most_recent_season()) %>%
   filter(week == max(week), report_status %in% c("Out", "Doubtful")) %>%
   select(player_id = gsis_id)
 
-# 3. Pull live Vegas lines for the upcoming week (Also handles Bye Weeks!)
+# 3. Pull live Vegas lines for the upcoming week
 schedules <- load_schedules(seasons = most_recent_season()) %>%
   filter(is.na(result), !is.na(spread_line), !is.na(total_line)) %>%
   filter(week == min(week)) %>%
   mutate(
-    home_implied = (total_line + spread_line) / 2,
-    away_implied = (total_line - spread_line) / 2
+    # FIXED: Subtracted the spread for the home team so favorites actually get the higher total
+    home_implied = (total_line - spread_line) / 2,
+    away_implied = (total_line + spread_line) / 2
   )
 
 vegas_totals <- bind_rows(
   schedules %>% select(team = home_team, implied_pts = home_implied),
   schedules %>% select(team = away_team, implied_pts = away_implied)
 ) %>%
-  # 21 points is the NFL average. We use the square root to prevent compounding 
-  # errors when multiplying both volume and efficiency later.
+  # Use square root to safely scale volume without going to extremes
   mutate(matchup_multiplier = sqrt(implied_pts / 21.0)) 
 
-# 4. Build the context-aware player pool
+# 4. Build the clean player pool
 player_pool <- stats %>%
   inner_join(active_rosters, by = "player_id") %>%
   anti_join(weekly_injuries, by = "player_id") %>%
@@ -55,18 +54,15 @@ player_pool <- stats %>%
     int_rate = sum(passing_interceptions, na.rm = TRUE) / sum(attempts, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  # Join Vegas multipliers (Players on Bye Weeks are safely excluded here)
   inner_join(vegas_totals, by = "team") %>%
   mutate(
+    # FIXED: Apply multiplier ONLY to volume. Removing it from rates stops the TD compounding error.
     expected_targets = expected_targets * matchup_multiplier,
     expected_carries = expected_carries * matchup_multiplier,
-    expected_pass_attempts = expected_pass_attempts * matchup_multiplier,
-    rec_td_rate = rec_td_rate * matchup_multiplier,
-    rush_td_rate = rush_td_rate * matchup_multiplier,
-    pass_td_rate = pass_td_rate * matchup_multiplier
+    expected_pass_attempts = expected_pass_attempts * matchup_multiplier
   ) %>%
-  # Dropped from 3 games to 1 game, so new starters are projected immediately
-  filter(games >= 1, (expected_targets >= 4.0 | expected_carries >= 6 | expected_pass_attempts >= 20)) %>% 
+  # FIXED: Restored games >= 3 to instantly drop the 1-game backups
+  filter(games >= 3, (expected_targets >= 4.0 | expected_carries >= 6 | expected_pass_attempts >= 20)) %>% 
   mutate(across(where(is.numeric), ~coalesce(., 0))) %>% 
   mutate(
     rec_td_rate = pmin(rec_td_rate, 0.12),
