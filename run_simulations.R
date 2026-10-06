@@ -3,10 +3,11 @@ library(purrr)
 library(readr)
 library(nflreadr)
 
-# 1. Load live player stats
-stats <- load_player_stats(seasons = most_recent_season())
+# 1. Load stats & INSTANTLY drop backup/garbage-time games
+stats <- load_player_stats(seasons = most_recent_season()) %>%
+  filter(attempts >= 10 | carries >= 4 | targets >= 3)
 
-# 2. Identify players who are on IR or ruled Out this week
+# 2. Live rosters and injury report
 active_rosters <- load_rosters(seasons = most_recent_season()) %>%
   filter(status == "ACT") %>%
   select(player_id = gsis_id)
@@ -15,7 +16,24 @@ weekly_injuries <- load_injuries(seasons = most_recent_season()) %>%
   filter(week == max(week), report_status %in% c("Out", "Doubtful")) %>%
   select(player_id = gsis_id)
 
-# 3. Build the clean, healthy player pool
+# 3. Pull live Vegas lines for the upcoming week (Also handles Bye Weeks!)
+schedules <- load_schedules(seasons = most_recent_season()) %>%
+  filter(is.na(result), !is.na(spread_line), !is.na(total_line)) %>%
+  filter(week == min(week)) %>%
+  mutate(
+    home_implied = (total_line + spread_line) / 2,
+    away_implied = (total_line - spread_line) / 2
+  )
+
+vegas_totals <- bind_rows(
+  schedules %>% select(team = home_team, implied_pts = home_implied),
+  schedules %>% select(team = away_team, implied_pts = away_implied)
+) %>%
+  # 21 points is the NFL average. We use the square root to prevent compounding 
+  # errors when multiplying both volume and efficiency later.
+  mutate(matchup_multiplier = sqrt(implied_pts / 21.0)) 
+
+# 4. Build the context-aware player pool
 player_pool <- stats %>%
   inner_join(active_rosters, by = "player_id") %>%
   anti_join(weekly_injuries, by = "player_id") %>%
@@ -37,7 +55,18 @@ player_pool <- stats %>%
     int_rate = sum(passing_interceptions, na.rm = TRUE) / sum(attempts, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  filter(games >= 3, (expected_targets >= 4.5 | expected_carries >= 8 | expected_pass_attempts >= 20)) %>% 
+  # Join Vegas multipliers (Players on Bye Weeks are safely excluded here)
+  inner_join(vegas_totals, by = "team") %>%
+  mutate(
+    expected_targets = expected_targets * matchup_multiplier,
+    expected_carries = expected_carries * matchup_multiplier,
+    expected_pass_attempts = expected_pass_attempts * matchup_multiplier,
+    rec_td_rate = rec_td_rate * matchup_multiplier,
+    rush_td_rate = rush_td_rate * matchup_multiplier,
+    pass_td_rate = pass_td_rate * matchup_multiplier
+  ) %>%
+  # Dropped from 3 games to 1 game, so new starters are projected immediately
+  filter(games >= 1, (expected_targets >= 4.0 | expected_carries >= 6 | expected_pass_attempts >= 20)) %>% 
   mutate(across(where(is.numeric), ~coalesce(., 0))) %>% 
   mutate(
     rec_td_rate = pmin(rec_td_rate, 0.12),
@@ -50,7 +79,7 @@ player_pool <- stats %>%
     std_dev_pass_yards = 6.0
   )
 
-# 4. Multi-Position Simulation Engine
+# 5. Multi-Position Simulation Engine
 run_player_sim <- function(row) {
   num_simulations <- 10000
   points <- numeric(num_simulations)
@@ -89,7 +118,7 @@ run_player_sim <- function(row) {
   )
 }
 
-# 5. Run Simulations & Save Results
+# 6. Run Simulations & Save Results
 set.seed(42)
 results <- player_pool %>%
   split(1:nrow(.)) %>%
