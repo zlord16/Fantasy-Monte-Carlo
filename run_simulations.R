@@ -32,7 +32,7 @@ player_pool <- stats %>%
     completion_rate = sum(completions, na.rm = TRUE) / sum(attempts, na.rm = TRUE),
     avg_yards_per_completion = sum(passing_yards, na.rm = TRUE) / sum(completions, na.rm = TRUE),
     pass_td_rate = sum(passing_tds, na.rm = TRUE) / sum(attempts, na.rm = TRUE),
-    int_rate = sum(interceptions, na.rm = TRUE) / sum(attempts, na.rm = TRUE),
+    int_rate = sum(passing_interceptions, na.rm = TRUE) / sum(attempts, na.rm = TRUE),
     
     .groups = "drop"
   ) %>%
