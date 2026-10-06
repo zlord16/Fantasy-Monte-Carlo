@@ -40,7 +40,7 @@ player_pool <- stats %>%
   filter(games >= 2, (expected_targets >= 3 | expected_carries >= 5 | expected_pass_attempts >= 15)) %>% 
   
   # Clean up NaN values (dividing by zero for players with no stats in a category)
-  mutate(across(everything(), ~coalesce(., 0))) %>% 
+  mutate(across(where(is.numeric), ~coalesce(., 0))) %>% 
   
   # Set baseline variance multipliers (Standard Deviation)
   mutate(
