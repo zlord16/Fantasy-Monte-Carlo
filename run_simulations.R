@@ -1,18 +1,32 @@
 library(dplyr)
 library(purrr)
 library(readr)
+library(nflreadr)
 
-# 1. Define sample player baseline inputs
-player_pool <- tibble(
-  player = c("Jaylen Waddle", "Tyreek Hill", "CeeDee Lamb", "Justin Jefferson", "Amon-Ra St. Brown"),
-  position = "WR",
-  expected_targets = c(6.5, 9.5, 10.0, 9.0, 9.2),
-  catch_rate = c(0.65, 0.68, 0.70, 0.67, 0.74),
-  avg_yards_per_catch = c(11.6, 14.2, 12.8, 14.5, 11.2),
-  std_dev_yards = c(5.0, 6.5, 5.5, 6.0, 4.5),
-  td_rate = c(0.04, 0.07, 0.06, 0.06, 0.05)
-)
+# 1. Load and aggregate live player stats
+stats <- load_player_stats(seasons = 2024)
 
+# Convert the raw weekly box scores into our required baseline averages
+player_pool <- stats %>%
+  filter(position %in% c("WR", "TE")) %>% 
+  group_by(player = player_display_name, position) %>%
+  summarize(
+    games = n(),
+    expected_targets = sum(targets, na.rm = TRUE) / games,
+    catch_rate = sum(receptions, na.rm = TRUE) / sum(targets, na.rm = TRUE),
+    avg_yards_per_catch = sum(receiving_yards, na.rm = TRUE) / sum(receptions, na.rm = TRUE),
+    td_rate = sum(receiving_tds, na.rm = TRUE) / sum(targets, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  # Filter for relevant players (averaging at least 4 targets a game)
+  filter(games >= 2, expected_targets >= 4) %>% 
+  mutate(
+    # Clean up any NaN values from dividing by zero
+    catch_rate = coalesce(catch_rate, 0),
+    avg_yards_per_catch = coalesce(avg_yards_per_catch, 0),
+    td_rate = coalesce(td_rate, 0),
+    std_dev_yards = 5.0 # We will keep variance static for now
+  )
 # 2. Simulation engine function
 run_player_sim <- function(player, position, expected_targets, catch_rate, avg_yards_per_catch, std_dev_yards, td_rate) {
   num_simulations <- 10000
