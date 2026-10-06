@@ -12,7 +12,7 @@ active_rosters <- load_rosters(seasons = most_recent_season()) %>%
 
 weekly_injuries <- load_injuries(seasons = most_recent_season()) %>%
   filter(week == max(week), report_status %in% c("Out", "Doubtful")) %>%
-  select(player_id = gsis_id)
+  select(player_id = gsis_id, team)
 
 # 3. Build the clean, healthy player pool
 player_pool <- stats %>%
@@ -21,7 +21,7 @@ player_pool <- stats %>%
   # Cross-reference with the weekly injury report (Drops players ruled Out)
   anti_join(weekly_injuries, by = "player_id") %>%
   filter(position %in% c("WR", "TE", "RB", "QB")) %>% 
-  group_by(player = player_display_name, position, team = recent_team) %>%
+  group_by(player = player_display_name, position, team) %>%
   summarize(
     games = n(),
     
