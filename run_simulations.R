@@ -4,7 +4,7 @@ library(readr)
 library(nflreadr)
 
 # 1. Load and aggregate live player stats
-stats <- load_player_stats(seasons = 2024)
+stats <- load_player_stats(seasons = 2026)
 
 # Convert the raw weekly box scores into our required baseline averages
 player_pool <- stats %>%
