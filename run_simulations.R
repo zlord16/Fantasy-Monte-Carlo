@@ -9,7 +9,7 @@ stats <- load_player_stats(seasons = most_recent_season())
 # 2. Identify players who are on IR or ruled Out this week
 active_rosters <- load_rosters(seasons = most_recent_season()) %>%
   filter(status == "ACT") %>%
-  select(player_id = gsis_id, team)
+  select(player_id = gsis_id)
 
 weekly_injuries <- load_injuries(seasons = most_recent_season()) %>%
   filter(week == max(week), report_status %in% c("Out", "Doubtful")) %>%
