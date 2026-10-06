@@ -7,7 +7,7 @@ library(nflreadr)
 # 1. LOAD AND AGGREGATE LIVE PLAYER STATS
 # ==========================================
 # Fetch current season stats
-stats <- load_player_stats(seasons = 2024)
+stats <- load_player_stats(seasons = most_recent_season())
 
 # Aggregate stats to create per-game averages for WRs, TEs, RBs, and QBs
 player_pool <- stats %>%
