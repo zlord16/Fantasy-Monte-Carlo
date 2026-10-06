@@ -12,7 +12,7 @@ stats <- load_player_stats(seasons = 2024)
 # Aggregate stats to create per-game averages for WRs, TEs, RBs, and QBs
 player_pool <- stats %>%
   filter(position %in% c("WR", "TE", "RB", "QB")) %>% 
-  group_by(player = player_display_name, position, team = recent_team) %>%
+  group_by(player = player_display_name, position) %>%
   summarize(
     games = n(),
     
@@ -102,7 +102,6 @@ run_player_sim <- function(row) {
   # --- D. RETURN RESULTS ---
   tibble(
     Player = row$player,
-    Team = row$team,
     Position = row$position,
     Floor_5th = round(quantile(points, 0.05), 1),
     Median_50th = round(quantile(points, 0.50), 1),
@@ -119,7 +118,7 @@ set.seed(42)
 results <- player_pool %>%
   split(1:nrow(.)) %>%
   map_dfr(run_player_sim) %>% 
-  arrange(Position, desc(Median_50th)) # Sort by highest ceiling upside
+  arrange(desc(Median_50th)) # Sort by highest ceiling upside
 
 # Create the output directory and save
 dir.create("results", showWarnings = FALSE)
