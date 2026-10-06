@@ -23,7 +23,7 @@ jobs:
 
       - name: Install R packages
         run: |
-          Rscript -e 'install.packages(c("dplyr", "purrr", "readr"))'
+          Rscript -e 'install.packages(c("dplyr", "purrr", "readr","nflreadr"))'
 
       - name: Run simulation script
         run: |
