@@ -37,17 +37,19 @@ player_pool <- stats %>%
     .groups = "drop"
   ) %>%
   # Filter out players who don't touch the ball enough to be fantasy relevant
-  filter(games >= 2, (expected_targets >= 3 | expected_carries >= 5 | expected_pass_attempts >= 15)) %>% 
+  filter(games >= 3, (expected_targets >= 4.5 | expected_carries >= 8 | expected_pass_attempts >= 20)) %>% 
   
-  # Clean up NaN values (dividing by zero for players with no stats in a category)
+  # 2. Clean up NaN values
   mutate(across(where(is.numeric), ~coalesce(., 0))) %>% 
   
-  # Set baseline variance multipliers (Standard Deviation)
+  # 3. Cap unsustainable outlier efficiency metrics to realistic NFL maximums
   mutate(
-    std_dev_rec_yards = 5.0,
-    std_dev_rush_yards = 3.5,
-    std_dev_pass_yards = 6.0
-  )
+    rec_td_rate = pmin(rec_td_rate, 0.12),   # Max 12% receiving TD rate per target
+    rush_td_rate = pmin(rush_td_rate, 0.08), # Max 8% rushing TD rate per carry
+    pass_td_rate = pmin(pass_td_rate, 0.08), # Max 8% passing TD rate per attempt
+    catch_rate = pmin(catch_rate, 0.85),     # Max 85% catch rate
+    avg_yards_per_catch = pmin(avg_yards_per_catch, 16.0) # Cap extreme yards-per-catch
+  ) %>% 
 
 # ==========================================
 # 2. THE MULTI-POSITION SIMULATION ENGINE
