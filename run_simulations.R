@@ -76,32 +76,43 @@ player_pool <- stats %>%
   )
 
 # 5. Multi-Position Simulation Engine
-run_player_sim <- function(row) {
+run_player_sim<- function(row) {
   num_simulations <- 10000
   points <- numeric(num_simulations)
   
+  # RECEIVING
   if (row$expected_targets > 0) {
-    targets <- rnbinom(num_simulations, size = 3, mu = row$expected_targets)
+    # rpois prevents absurd 12-target rolls for backs who average 4
+    targets <- rpois(num_simulations, lambda = row$expected_targets)
     receptions <- rbinom(num_simulations, size = targets, prob = row$catch_rate)
-    rec_yards <- vapply(receptions, function(rec) if (rec > 0) max(0, sum(rnorm(rec, mean = row$avg_yards_per_catch, sd = row$std_dev_rec_yards))) else 0, numeric(1))
+    rec_yards <- vapply(receptions, function(rec) {
+      if (rec > 0) max(0, sum(rnorm(rec, mean = row$avg_yards_per_catch, sd = row$std_dev_rec_yards))) else 0
+    }, numeric(1))
     rec_tds <- rbinom(num_simulations, size = targets, prob = row$rec_td_rate)
     points <- points + (receptions * 1.0) + (rec_yards * 0.1) + (rec_tds * 6.0)
   }
   
+  # RUSHING
   if (row$expected_carries > 0) {
-    carries <- rnbinom(num_simulations, size = 5, mu = row$expected_carries)
-    rush_yards <- vapply(carries, function(rush) if (rush > 0) max(0, sum(rnorm(rush, mean = row$avg_yards_per_carry, sd = row$std_dev_rush_yards))) else 0, numeric(1))
+    # rpois keeps carries bounded to realistic NFL ranges
+    carries <- rpois(num_simulations, lambda = row$expected_carries)
+    rush_yards <- vapply(carries, function(rush) {
+      if (rush > 0) max(0, sum(rnorm(rush, mean = row$avg_yards_per_carry, sd = row$std_dev_rush_yards))) else 0
+    }, numeric(1))
     rush_tds <- rbinom(num_simulations, size = carries, prob = row$rush_td_rate)
     points <- points + (rush_yards * 0.1) + (rush_tds * 6.0)
   }
   
+  # PASSING
   if (row$expected_pass_attempts > 0) {
     pass_attempts <- rpois(num_simulations, lambda = row$expected_pass_attempts)
     completions <- rbinom(num_simulations, size = pass_attempts, prob = row$completion_rate)
-    pass_yards <- vapply(completions, function(comp) if (comp > 0) max(0, sum(rnorm(comp, mean = row$avg_yards_per_completion, sd = row$std_dev_pass_yards))) else 0, numeric(1))
+    pass_yards <- vapply(completions, function(comp) {
+      if (comp > 0) max(0, sum(rnorm(comp, mean = row$avg_yards_per_completion, sd = row$std_dev_pass_yards))) else 0
+    }, numeric(1))
     pass_tds <- rbinom(num_simulations, size = pass_attempts, prob = row$pass_td_rate)
     interceptions <- rbinom(num_simulations, size = pass_attempts, prob = row$int_rate)
-    points <- points + (pass_yards * 0.04) + (pass_tds * 6.0) - (interceptions * 2.0)
+    points <- points + (pass_yards * 0.04) + (pass_tds * 4.0) - (interceptions * 2.0)
   }
   
   tibble(
